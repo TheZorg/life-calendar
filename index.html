@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Calendar</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "pixi.js": "https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.mjs"
+        }
+      }
+    </script>
+</head>
+
+<body>
+    <div class="controls">
+      <label>
+        Birthdate
+        <input id="birthdate" type="date" value="2000-01-01">
+      </label>
+      <label>
+        Life expectancy (years)
+        <input id="life-expectancy" type="number" min="1" max="120" value="90">
+      </label>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
