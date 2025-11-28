@@ -59,6 +59,33 @@ export interface GridPalette {
   event: number;
 }
 
+export interface PostProcessingBloomConfig {
+  enabled: boolean;
+  threshold: number;
+  bloomScale: number;
+  brightness: number;
+  blur: number;
+}
+
+export interface PostProcessingAberrationConfig {
+  amount: number;
+  jitter: number;
+  animated: boolean;
+}
+
+export interface PostProcessingGrainConfig {
+  amount: number;
+  seed: number;
+  animated: boolean;
+}
+
+export interface PostProcessingConfig {
+  enabled: boolean;
+  bloom: PostProcessingBloomConfig;
+  aberration: PostProcessingAberrationConfig;
+  grain: PostProcessingGrainConfig;
+}
+
 export const defaultGridMotion: GridMotionConfig = {
   idle: {
     jitter: 0.9,
@@ -112,6 +139,27 @@ export const defaultGridPalette: GridPalette = {
   past: 0xffffff,
   current: 0xffeb3b,
   event: 0xe27d9a,
+};
+
+export const defaultPostProcessing: PostProcessingConfig = {
+  enabled: true,
+  bloom: {
+    enabled: false,
+    threshold: 0.65,
+    bloomScale: 0.8,
+    brightness: 1.05,
+    blur: 3,
+  },
+  aberration: {
+    amount: 2.8,
+    jitter: 1.2,
+    animated: true,
+  },
+  grain: {
+    amount: 0.08,
+    seed: 0.37,
+    animated: true,
+  },
 };
 
 export interface ViewportConfig {

@@ -4,12 +4,11 @@
     "dev": "deno run --allow-net --allow-read dev_server.ts",
     "dev:watch": "deno run --watch --allow-net --allow-read dev_server.ts",
     "check": "deno check app.ts",
-    "bundle": "deno bundle --import-map=import_map.json -o app.js app.ts",
-    "bundle:watch": "deno bundle --watch --import-map=import_map.json -o app.js app.ts",
+    "bundle": "deno bundle -o app.js app.ts",
+    "bundle:watch": "deno bundle --watch -o app.js app.ts",
     "dev:live": "sh -c \"deno task bundle:watch & deno task dev:watch\""
   },
   "compilerOptions": {
-    "lib": ["DOM", "ES2020", "deno.ns"],
-    "types": ["npm:pixi.js"]
+    "lib": ["DOM", "ES2020", "deno.ns"]
   }
 }

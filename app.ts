@@ -1,30 +1,48 @@
-import { Application } from 'pixi.js';
-import { LifeData } from './data.ts';
-import { GridLayout } from './grid.ts';
-import { ViewportManager } from './viewport.ts';
+import { Application, NoiseFilter, Point } from "pixi.js";
+import { AdvancedBloomFilter, RGBSplitFilter } from "pixi-filters";
+import { LifeData } from "./data.ts";
+import { GridLayout } from "./grid.ts";
+import { ViewportManager } from "./viewport.ts";
 import {
-  GridMotionConfig,
-  ViewportConfig,
-  GridPalette,
   defaultGridMotion,
-  defaultViewportConfig,
   defaultGridPalette,
-} from './config.ts';
+  defaultPostProcessing,
+  defaultViewportConfig,
+  GridMotionConfig,
+  GridPalette,
+  PostProcessingConfig,
+  ViewportConfig,
+} from "./config.ts";
 
 const app = new Application();
 let gridLayout: GridLayout;
-const BIRTHDATE_KEY = 'life-calendar.birthdate';
-const LIFE_EXPECTANCY_KEY = 'life-calendar.lifeExpectancy';
-const SPANS_KEY = 'life-calendar.spans';
-const SPAN_COLORS = [0x7bdff2, 0xf9c74f, 0xff9f1c, 0xe07a5f, 0xc08497, 0x84a59d, 0x90be6d];
-type StoredSpan = { id: string; title: string; start: string; end?: string | null; color: number; openEnded?: boolean };
+const BIRTHDATE_KEY = "life-calendar.birthdate";
+const LIFE_EXPECTANCY_KEY = "life-calendar.lifeExpectancy";
+const SPANS_KEY = "life-calendar.spans";
+const SPAN_COLORS = [
+  0x7bdff2,
+  0xf9c74f,
+  0xff9f1c,
+  0xe07a5f,
+  0xc08497,
+  0x84a59d,
+  0x90be6d,
+];
+type StoredSpan = {
+  id: string;
+  title: string;
+  start: string;
+  end?: string | null;
+  color: number;
+  openEnded?: boolean;
+};
 let spans: StoredSpan[] = [];
 let editingSpanId: string | null = null;
 
 function registerErrorLogging() {
-  globalThis.addEventListener('error', (event) => {
+  globalThis.addEventListener("error", (event) => {
     const { message, filename, lineno, colno, error } = event;
-    console.error('[LifeCalendar] Uncaught error', {
+    console.error("[LifeCalendar] Uncaught error", {
       message,
       filename,
       lineno,
@@ -33,9 +51,9 @@ function registerErrorLogging() {
     });
   });
 
-  globalThis.addEventListener('unhandledrejection', (event) => {
+  globalThis.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
-    console.error('[LifeCalendar] Unhandled promise rejection', {
+    console.error("[LifeCalendar] Unhandled promise rejection", {
       reason,
       stack: reason?.stack,
     });
@@ -89,10 +107,14 @@ function loadStoredSpans(): StoredSpan[] {
         title: span.title,
         start: span.start,
         end: span.end ?? null,
-        color: typeof span.color === 'number' ? span.color : parseInt(String(span.color ?? '0'), 10) || SPAN_COLORS[0],
+        color: typeof span.color === "number"
+          ? span.color
+          : parseInt(String(span.color ?? "0"), 10) || SPAN_COLORS[0],
         openEnded: span.openEnded ?? span.end === null,
       }))
-      .filter((span) => span.title && span.start && (span.end || span.openEnded));
+      .filter((span) =>
+        span.title && span.start && (span.end || span.openEnded)
+      );
   } catch {
     return [];
   }
@@ -107,13 +129,15 @@ function persistSpans(value: StoredSpan[]) {
 }
 
 function getBirthdate(): string {
-  const input = document.getElementById('birthdate') as HTMLInputElement | null;
-  return input?.value || '2000-01-01';
+  const input = document.getElementById("birthdate") as HTMLInputElement | null;
+  return input?.value || "2000-01-01";
 }
 
 function getLifeExpectancy(): number {
-  const input = document.getElementById('life-expectancy') as HTMLInputElement | null;
-  const parsed = Number.parseInt(input?.value || '', 10);
+  const input = document.getElementById("life-expectancy") as
+    | HTMLInputElement
+    | null;
+  const parsed = Number.parseInt(input?.value || "", 10);
   const clamped = Math.min(Math.max(parsed || 90, 1), 120);
 
   if (input && input.value !== clamped.toString()) {
@@ -125,7 +149,7 @@ function getLifeExpectancy(): number {
 
 function buildLifeData(): LifeData {
   const lifeData = new LifeData(getBirthdate(), getLifeExpectancy());
-  lifeData.addEvent(new Date(), 'Today', 'milestone');
+  lifeData.addEvent(new Date(), "Today", "milestone");
   spans.forEach((span) => {
     lifeData.spans.push({
       id: span.id,
@@ -148,26 +172,47 @@ function loadConfig<T>(defaults: T, overrides?: Partial<T>): T {
   return { ...defaults, ...(overrides || {}) };
 }
 
+function loadPostProcessingConfig(
+  overrides?: Partial<PostProcessingConfig>,
+): PostProcessingConfig {
+  return {
+    ...defaultPostProcessing,
+    ...(overrides || {}),
+    bloom: { ...defaultPostProcessing.bloom, ...(overrides?.bloom || {}) },
+    aberration: {
+      ...defaultPostProcessing.aberration,
+      ...(overrides?.aberration || {}),
+    },
+    grain: { ...defaultPostProcessing.grain, ...(overrides?.grain || {}) },
+  };
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function numberToHex(color: number) {
-  return `#${color.toString(16).padStart(6, '0')}`;
+  return `#${color.toString(16).padStart(6, "0")}`;
 }
 
 function parseColorInput(value: string, fallback: number) {
   if (!value) return fallback;
-  const clean = value.startsWith('#') ? value.slice(1) : value;
+  const clean = value.startsWith("#") ? value.slice(1) : value;
   const parsed = Number.parseInt(clean, 16);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function getDefaultSpanStartValue() {
-  const birthInput = document.getElementById('birthdate') as HTMLInputElement | null;
-  return birthInput?.value || '';
+  const birthInput = document.getElementById("birthdate") as
+    | HTMLInputElement
+    | null;
+  return birthInput?.value || "";
 }
 
 function getDefaultSpanEndValue() {
@@ -175,19 +220,33 @@ function getDefaultSpanEndValue() {
 }
 
 function updateSpanFormState(span: StoredSpan | null) {
-  const titleInput = document.getElementById('span-title') as HTMLInputElement | null;
-  const startInput = document.getElementById('span-start') as HTMLInputElement | null;
-  const endInput = document.getElementById('span-end') as HTMLInputElement | null;
-  const ongoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
-  const colorInput = document.getElementById('span-color') as HTMLInputElement | null;
-  const submitBtn = document.getElementById('submit-span') as HTMLButtonElement | null;
-  const cancelBtn = document.getElementById('cancel-edit') as HTMLButtonElement | null;
+  const titleInput = document.getElementById("span-title") as
+    | HTMLInputElement
+    | null;
+  const startInput = document.getElementById("span-start") as
+    | HTMLInputElement
+    | null;
+  const endInput = document.getElementById("span-end") as
+    | HTMLInputElement
+    | null;
+  const ongoingInput = document.getElementById("span-ongoing") as
+    | HTMLInputElement
+    | null;
+  const colorInput = document.getElementById("span-color") as
+    | HTMLInputElement
+    | null;
+  const submitBtn = document.getElementById("submit-span") as
+    | HTMLButtonElement
+    | null;
+  const cancelBtn = document.getElementById("cancel-edit") as
+    | HTMLButtonElement
+    | null;
 
   const setOngoing = (checked: boolean) => {
     if (ongoingInput) ongoingInput.checked = checked;
     if (endInput) {
       endInput.disabled = checked;
-      if (checked) endInput.value = '';
+      if (checked) endInput.value = "";
     }
   };
 
@@ -195,20 +254,24 @@ function updateSpanFormState(span: StoredSpan | null) {
     editingSpanId = span.id;
     if (titleInput) titleInput.value = span.title;
     if (startInput) startInput.value = span.start;
-    if (endInput) endInput.value = span.end || '';
+    if (endInput) endInput.value = span.end || "";
     if (colorInput) colorInput.value = numberToHex(span.color);
     setOngoing(Boolean(span.openEnded));
-    if (submitBtn) submitBtn.textContent = 'Update span';
-    if (cancelBtn) cancelBtn.style.visibility = 'visible';
+    if (submitBtn) submitBtn.textContent = "Update span";
+    if (cancelBtn) cancelBtn.style.visibility = "visible";
   } else {
     editingSpanId = null;
-    if (titleInput) titleInput.value = '';
+    if (titleInput) titleInput.value = "";
     if (startInput) startInput.value = getDefaultSpanStartValue();
     if (endInput) endInput.value = getDefaultSpanEndValue();
-    if (colorInput) colorInput.value = numberToHex(SPAN_COLORS[spans.length % SPAN_COLORS.length]);
+    if (colorInput) {
+      colorInput.value = numberToHex(
+        SPAN_COLORS[spans.length % SPAN_COLORS.length],
+      );
+    }
     setOngoing(false);
-    if (submitBtn) submitBtn.textContent = 'Add span';
-    if (cancelBtn) cancelBtn.style.visibility = 'hidden';
+    if (submitBtn) submitBtn.textContent = "Add span";
+    if (cancelBtn) cancelBtn.style.visibility = "hidden";
   }
 }
 
@@ -217,44 +280,46 @@ function beginEditSpan(span: StoredSpan) {
 }
 
 function renderSpanList() {
-  const list = document.getElementById('span-list');
+  const list = document.getElementById("span-list");
   if (!list) return;
-  list.innerHTML = '';
+  list.innerHTML = "";
 
   spans.forEach((span) => {
-    const row = document.createElement('div');
-    row.className = 'span-row';
+    const row = document.createElement("div");
+    row.className = "span-row";
     if (span.id === editingSpanId) {
-      row.style.outline = '1px solid rgba(255, 255, 255, 0.14)';
+      row.style.outline = "1px solid rgba(255, 255, 255, 0.14)";
     }
 
-    const swatch = document.createElement('div');
-    swatch.className = 'span-swatch';
+    const swatch = document.createElement("div");
+    swatch.className = "span-swatch";
     swatch.style.backgroundColor = numberToHex(span.color);
     row.appendChild(swatch);
 
-    const meta = document.createElement('div');
-    meta.className = 'span-meta';
-    const title = document.createElement('div');
-    title.className = 'span-title';
+    const meta = document.createElement("div");
+    meta.className = "span-meta";
+    const title = document.createElement("div");
+    title.className = "span-title";
     title.textContent = span.title;
-    const dates = document.createElement('div');
-    dates.className = 'span-dates-text';
-    dates.textContent = `${formatDate(span.start)} – ${span.end ? formatDate(span.end) : 'Present'}`;
+    const dates = document.createElement("div");
+    dates.className = "span-dates-text";
+    dates.textContent = `${formatDate(span.start)} – ${
+      span.end ? formatDate(span.end) : "Present"
+    }`;
     meta.appendChild(title);
     meta.appendChild(dates);
     row.appendChild(meta);
 
-    const edit = document.createElement('button');
-    edit.className = 'span-edit';
-    edit.textContent = 'Edit';
-    edit.addEventListener('click', () => beginEditSpan(span));
+    const edit = document.createElement("button");
+    edit.className = "span-edit";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", () => beginEditSpan(span));
     row.appendChild(edit);
 
-    const remove = document.createElement('button');
-    remove.className = 'span-remove';
-    remove.textContent = '✕';
-    remove.addEventListener('click', () => {
+    const remove = document.createElement("button");
+    remove.className = "span-remove";
+    remove.textContent = "✕";
+    remove.addEventListener("click", () => {
       spans = spans.filter((s) => s.id !== span.id);
       persistSpans(spans);
       if (editingSpanId === span.id) {
@@ -270,11 +335,21 @@ function renderSpanList() {
 }
 
 function handleAddSpan() {
-  const titleInput = document.getElementById('span-title') as HTMLInputElement | null;
-  const startInput = document.getElementById('span-start') as HTMLInputElement | null;
-  const endInput = document.getElementById('span-end') as HTMLInputElement | null;
-  const ongoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
-  const colorInput = document.getElementById('span-color') as HTMLInputElement | null;
+  const titleInput = document.getElementById("span-title") as
+    | HTMLInputElement
+    | null;
+  const startInput = document.getElementById("span-start") as
+    | HTMLInputElement
+    | null;
+  const endInput = document.getElementById("span-end") as
+    | HTMLInputElement
+    | null;
+  const ongoingInput = document.getElementById("span-ongoing") as
+    | HTMLInputElement
+    | null;
+  const colorInput = document.getElementById("span-color") as
+    | HTMLInputElement
+    | null;
   if (!titleInput || !startInput || !endInput) return;
 
   const title = titleInput.value.trim();
@@ -285,7 +360,10 @@ function handleAddSpan() {
 
   const startDate = new Date(start);
   const endDate = end ? new Date(end) : null;
-  if (Number.isNaN(startDate.getTime()) || (end && Number.isNaN(endDate?.getTime() || 0))) return;
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    (end && Number.isNaN(endDate?.getTime() || 0))
+  ) return;
 
   let normalizedStart = start;
   let normalizedEnd = end;
@@ -302,22 +380,27 @@ function handleAddSpan() {
     spans = spans.map((s) =>
       s.id === editingSpanId
         ? {
-            ...s,
-            title,
-            start: normalizedStart,
-            end: isOngoing ? null : normalizedEnd,
-            openEnded: isOngoing,
-            color: colorInput ? parseColorInput(colorInput.value, s.color) : s.color,
-          }
+          ...s,
+          title,
+          start: normalizedStart,
+          end: isOngoing ? null : normalizedEnd,
+          openEnded: isOngoing,
+          color: colorInput
+            ? parseColorInput(colorInput.value, s.color)
+            : s.color,
+        }
         : s
     );
   } else {
     const defaultColor = SPAN_COLORS[spans.length % SPAN_COLORS.length];
-    const color = colorInput ? parseColorInput(colorInput.value, defaultColor) : defaultColor;
+    const color = colorInput
+      ? parseColorInput(colorInput.value, defaultColor)
+      : defaultColor;
     spans = [
       ...spans,
       {
-        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        id: crypto.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         title,
         start: normalizedStart,
         end: isOngoing ? null : normalizedEnd,
@@ -343,22 +426,32 @@ async function init() {
       resolution: globalThis.devicePixelRatio || 1,
     });
   } catch (error) {
-    console.error('PixiJS init failed', error);
+    console.error("PixiJS init failed", error);
     return;
   }
 
   registerErrorLogging();
 
-  document.getElementById('app')?.appendChild(app.canvas);
+  document.getElementById("app")?.appendChild(app.canvas);
   (window as typeof window & { app?: Application }).app = app;
 
-  const birthInput = document.getElementById('birthdate') as HTMLInputElement | null;
-  const expectancyInput = document.getElementById('life-expectancy') as HTMLInputElement | null;
-  const spanStartInput = document.getElementById('span-start') as HTMLInputElement | null;
-  const spanEndInput = document.getElementById('span-end') as HTMLInputElement | null;
-  const spanOngoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
-  const submitSpanBtn = document.getElementById('submit-span');
-  const cancelEditBtn = document.getElementById('cancel-edit');
+  const birthInput = document.getElementById("birthdate") as
+    | HTMLInputElement
+    | null;
+  const expectancyInput = document.getElementById("life-expectancy") as
+    | HTMLInputElement
+    | null;
+  const spanStartInput = document.getElementById("span-start") as
+    | HTMLInputElement
+    | null;
+  const spanEndInput = document.getElementById("span-end") as
+    | HTMLInputElement
+    | null;
+  const spanOngoingInput = document.getElementById("span-ongoing") as
+    | HTMLInputElement
+    | null;
+  const submitSpanBtn = document.getElementById("submit-span");
+  const cancelEditBtn = document.getElementById("cancel-edit");
   spans = loadStoredSpans();
 
   const storedBirth = loadStoredBirthdate();
@@ -383,45 +476,116 @@ async function init() {
       gridMotion?: Partial<GridMotionConfig>;
       viewport?: Partial<ViewportConfig>;
       gridPalette?: Partial<GridPalette>;
+      postProcessing?: Partial<PostProcessingConfig>;
     };
   }).lifeConfig;
-  const gridMotion = loadConfig(defaultGridMotion, runtimeOverrides?.gridMotion);
-  const gridPalette = loadConfig(defaultGridPalette, runtimeOverrides?.gridPalette);
-  const viewportCfg = loadConfig(defaultViewportConfig, runtimeOverrides?.viewport);
+  const gridMotion = loadConfig(
+    defaultGridMotion,
+    runtimeOverrides?.gridMotion,
+  );
+  const gridPalette = loadConfig(
+    defaultGridPalette,
+    runtimeOverrides?.gridPalette,
+  );
+  const viewportCfg = loadConfig(
+    defaultViewportConfig,
+    runtimeOverrides?.viewport,
+  );
+  const postFxCfg = loadPostProcessingConfig(runtimeOverrides?.postProcessing);
 
   gridLayout = new GridLayout(app, gridMotion, gridPalette);
+  applyPostProcessing(app, postFxCfg);
   renderLife();
   renderSpanList();
 
-  birthInput?.addEventListener('change', () => {
+  birthInput?.addEventListener("change", () => {
     persistBirthdate(getBirthdate());
     renderLife();
   });
-  expectancyInput?.addEventListener('change', () => {
+  expectancyInput?.addEventListener("change", () => {
     const value = getLifeExpectancy();
     persistLifeExpectancy(value);
     renderLife();
   });
 
-  submitSpanBtn?.addEventListener('click', handleAddSpan);
-  cancelEditBtn?.addEventListener('click', () => updateSpanFormState(null));
-  spanOngoingInput?.addEventListener('change', () => {
-    const endField = document.getElementById('span-end') as HTMLInputElement | null;
+  submitSpanBtn?.addEventListener("click", handleAddSpan);
+  cancelEditBtn?.addEventListener("click", () => updateSpanFormState(null));
+  spanOngoingInput?.addEventListener("change", () => {
+    const endField = document.getElementById("span-end") as
+      | HTMLInputElement
+      | null;
     if (!endField) return;
     endField.disabled = Boolean(spanOngoingInput.checked);
     if (spanOngoingInput.checked) {
-      endField.value = '';
+      endField.value = "";
     } else if (!endField.value) {
       endField.value = getDefaultSpanEndValue();
     }
   });
-  document.getElementById('span-title')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+  document.getElementById("span-title")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
       handleAddSpan();
     }
   });
 
   new ViewportManager(app, gridLayout.container, viewportCfg);
+}
+
+function applyPostProcessing(app: Application, config: PostProcessingConfig) {
+  if (!config.enabled) return;
+
+  const filters = [];
+  if (config.bloom.enabled) {
+    const bloom = new AdvancedBloomFilter({
+      threshold: config.bloom.threshold,
+      bloomScale: config.bloom.bloomScale,
+      brightness: config.bloom.brightness,
+      blur: config.bloom.blur,
+    });
+    filters.push(bloom);
+  }
+  const rgbSplit = new RGBSplitFilter();
+  const grain = new NoiseFilter({
+    noise: config.grain.amount,
+    seed: config.grain.seed,
+  });
+  filters.push(rgbSplit, grain);
+  app.stage.filters = filters;
+
+  let elapsed = 0;
+  const aberrationBase = config.aberration.amount;
+  const jitter = config.aberration.jitter;
+  const updateAberration = (offset: number) => {
+    const redX = -offset;
+    const redY = -offset * 0.55;
+    const blueX = offset;
+    const blueY = offset * 0.55;
+    rgbSplit.red instanceof Point
+      ? rgbSplit.red.set(redX, redY)
+      : (rgbSplit.red = new Point(redX, redY));
+    rgbSplit.green instanceof Point
+      ? rgbSplit.green.set(0, 0)
+      : (rgbSplit.green = new Point(0, 0));
+    rgbSplit.blue instanceof Point
+      ? rgbSplit.blue.set(blueX, blueY)
+      : (rgbSplit.blue = new Point(blueX, blueY));
+  };
+  updateAberration(aberrationBase);
+
+  app.ticker.add((ticker) => {
+    const deltaMs = ticker.deltaMS ?? 0;
+    elapsed += deltaMs;
+
+    if (config.aberration.animated) {
+      const wobble = Math.sin(elapsed * 0.0018) * jitter;
+      updateAberration(aberrationBase + wobble);
+    }
+
+    if (config.grain.animated) {
+      const deltaSeed = (deltaMs * 0.0002) % 1;
+      grain.seed = (grain.seed + deltaSeed) % 1;
+    }
+  });
 }
 
 init();

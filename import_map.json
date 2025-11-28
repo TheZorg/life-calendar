@@ -1,6 +1,7 @@
 {
   "imports": {
-    "pixi.js": "https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.mjs",
+    "pixi.js": "npm:pixi.js@latest",
+    "pixi-filters": "npm:pixi-filters@latest",
     "serve-dir": "https://deno.land/std@0.224.0/http/file_server.ts"
   }
 }
