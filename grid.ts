@@ -39,6 +39,9 @@ export class GridLayout {
   palette: GridPalette;
   yearLabel: LabelState;
   weekLabel: LabelState;
+  spanGutter = 170;
+  spanLaneSpacing = 26;
+  spanMinWidth = 120;
 
   constructor(
     app: Application,
@@ -66,12 +69,17 @@ export class GridLayout {
 
     const cellLayer = new Container();
     const ringLayer = new Container();
+    const spanLayer = new Container();
+    spanLayer.sortableChildren = true;
     const labelLayer = new Container();
     this.container.addChild(cellLayer);
     this.container.addChild(ringLayer);
+    this.container.addChild(spanLayer);
     this.container.addChild(labelLayer);
     labelLayer.addChild(this.weekLabel.container);
     labelLayer.addChild(this.yearLabel.container);
+
+    const cellByIndex = new Map<number, WeekCell>();
 
     data.weeks.forEach((week, i) => {
       const x = week.weekIndex * (this.weekSize + this.gap);
@@ -84,6 +92,11 @@ export class GridLayout {
         color = this.palette.past;
       } else if (week.isCurrent) {
         color = this.palette.current;
+      }
+
+      const spanTint = this.mixSpanColors(week.spans);
+      if (spanTint !== null) {
+        color = this.mixColor(color, spanTint, 0.7);
       }
 
       const graphic = new Graphics();
@@ -117,16 +130,20 @@ export class GridLayout {
         yearHeat: 0,
         focusHeat: 0,
       });
+      cellByIndex.set(week.index, this.cells[this.cells.length - 1]);
     });
+
+    this.renderSpans(data, spanLayer, cellByIndex);
 
     const gridWidth = 52 * (this.weekSize + this.gap);
     const gridHeight = data.lifeExpectancyYears * (this.weekSize + this.gap);
+    const totalWidth = gridWidth + this.spanGutter;
 
     if (hadChildren) {
       this.container.scale.set(prevScale.x, prevScale.y);
       this.container.position.set(prevPosition.x, prevPosition.y);
     } else {
-      this.container.x = (this.app.screen.width - gridWidth) / 2;
+      this.container.x = (this.app.screen.width - totalWidth) / 2 + this.spanGutter;
       this.container.y = (this.app.screen.height - gridHeight) / 2;
     }
   }
@@ -370,6 +387,96 @@ export class GridLayout {
     return startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  private renderSpans(data: LifeData, layer: Container, cellByIndex: Map<number, WeekCell>) {
+    if (!data.spansWithBounds?.length) return;
+
+    const spans = [...data.spansWithBounds].sort(
+      (a, b) => a.startWeekIndex - b.startWeekIndex || a.endWeekIndex - b.endWeekIndex
+    );
+    const laneEnds: number[] = [];
+
+    for (const span of spans) {
+      const startCell = cellByIndex.get(span.startWeekIndex);
+      const endCell = cellByIndex.get(span.endWeekIndex);
+      if (!startCell || !endCell) continue;
+
+      const startYear = startCell.yearIndex;
+      let lane = laneEnds.findIndex((end) => {
+        const endYear = Math.floor(end / 52);
+        return span.startWeekIndex > end || startYear >= endYear;
+      });
+      if (lane === -1) lane = laneEnds.length;
+      laneEnds[lane] = span.endWeekIndex;
+
+      const yMid = (startCell.baseY + endCell.baseY) / 2;
+      const baseX = -this.spanGutter + 16;
+      const laneX = baseX - lane * this.spanLaneSpacing;
+      const isOpenEnded = span.endDate === null;
+
+      const text = new Text({
+        text: span.title,
+        style: {
+          fill: 0x0b0d10,
+          fontSize: 12,
+          fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+        },
+      });
+      text.anchor.set(0, 0.5);
+
+      const padX = 10;
+      const pillHeight = 22;
+      const pillWidth = Math.max(this.spanMinWidth, text.width + padX * 2);
+
+      const pillBg = new Graphics();
+      pillBg.roundRect(0, -pillHeight / 2, pillWidth, pillHeight, pillHeight / 2.2);
+      pillBg.fill({ color: span.color, alpha: 0.88 });
+
+      const minY = Math.min(startCell.baseY, endCell.baseY);
+      const maxY = Math.max(startCell.baseY, endCell.baseY);
+
+      const hookX = laneX + pillWidth + 12;
+      const connector = new Graphics();
+      connector.moveTo(laneX + pillWidth, yMid);
+      connector.lineTo(hookX, yMid);
+      connector.lineTo(hookX, minY);
+      connector.lineTo(hookX, maxY);
+      connector.stroke({ width: 2, color: span.color, alpha: 0.9 });
+      connector.zIndex = 0;
+      const dots = new Graphics();
+      dots.circle(hookX, minY, 3);
+      if (!isOpenEnded && maxY !== minY) {
+        dots.circle(hookX, maxY, 3);
+      }
+      dots.fill({ color: span.color, alpha: 0.9 });
+      dots.zIndex = 0.5;
+      layer.addChild(connector);
+      layer.addChild(dots);
+
+      if (isOpenEnded) {
+        const dashes = new Graphics();
+        const dashLen = 7;
+        const gap = 4;
+        const dashCount = 3;
+        for (let i = 0; i < dashCount; i++) {
+          const y = maxY - i * (gap + 2);
+          dashes.moveTo(hookX - dashLen / 2, y);
+          dashes.lineTo(hookX + dashLen / 2, y);
+        }
+        dashes.stroke({ width: 2, color: span.color, alpha: 0.9 });
+        dashes.zIndex = 0.6;
+        layer.addChild(dashes);
+      }
+
+      const pill = new Container();
+      pill.position.set(laneX, yMid);
+      pill.addChild(pillBg);
+      text.position.set(padX, 0);
+      pill.addChild(text);
+      pill.zIndex = 1;
+      layer.addChild(pill);
+    }
+  }
+
   private mergeMotion(base: GridMotionConfig, overrides: Partial<GridMotionConfig>): GridMotionConfig {
     return {
       idle: { ...base.idle, ...(overrides.idle || {}) },
@@ -407,5 +514,21 @@ export class GridLayout {
     const bl = Math.round(ab + (bb - ab) * clampT);
 
     return (r << 16) | (g << 8) | bl;
+  }
+
+  private mixSpanColors(spans: { color: number }[]): number | null {
+    if (!spans.length) return null;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+
+    spans.forEach((span) => {
+      r += (span.color >> 16) & 0xff;
+      g += (span.color >> 8) & 0xff;
+      b += span.color & 0xff;
+    });
+
+    const count = spans.length;
+    return ((Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count)) >>> 0;
   }
 }

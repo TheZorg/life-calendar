@@ -109,7 +109,7 @@ export const defaultGridMotion: GridMotionConfig = {
 
 export const defaultGridPalette: GridPalette = {
   future: 0x2f3338,
-  past: 0x4caf50,
+  past: 0xffffff,
   current: 0xffeb3b,
   event: 0xe27d9a,
 };

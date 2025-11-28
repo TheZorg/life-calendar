@@ -12,19 +12,45 @@
           "pixi.js": "https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.mjs"
         }
       }
-    </script>
+  </script>
 </head>
 
 <body>
     <div class="controls">
-      <label>
-        Birthdate
-        <input id="birthdate" type="date" value="2000-01-01">
-      </label>
-      <label>
-        Life expectancy (years)
-        <input id="life-expectancy" type="number" min="1" max="120" value="90">
-      </label>
+      <div class="control-group">
+        <label>
+          Birthdate
+          <input id="birthdate" type="date" value="2000-01-01">
+        </label>
+        <label>
+          Life expectancy (years)
+          <input id="life-expectancy" type="number" min="1" max="120" value="90">
+        </label>
+      </div>
+      <div class="span-panel">
+        <div class="span-form">
+          <input id="span-title" type="text" placeholder="Span title">
+          <div class="span-dates">
+            <label>
+              Start
+              <input id="span-start" type="date">
+            </label>
+            <label>
+              End
+              <input id="span-end" type="date">
+            </label>
+          </div>
+          <label class="span-ongoing">
+            <input id="span-ongoing" type="checkbox">
+            Ongoing / no end date
+          </label>
+          <div class="span-actions">
+            <button id="submit-span" type="button">Add span</button>
+            <button id="cancel-edit" type="button" class="ghost">Cancel</button>
+          </div>
+        </div>
+        <div id="span-list" class="span-list"></div>
+      </div>
     </div>
     <div id="app"></div>
     <script type="module" src="app.js"></script>

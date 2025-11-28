@@ -15,6 +15,11 @@ const app = new Application();
 let gridLayout: GridLayout;
 const BIRTHDATE_KEY = 'life-calendar.birthdate';
 const LIFE_EXPECTANCY_KEY = 'life-calendar.lifeExpectancy';
+const SPANS_KEY = 'life-calendar.spans';
+const SPAN_COLORS = [0x7bdff2, 0xf9c74f, 0xff9f1c, 0xe07a5f, 0xc08497, 0x84a59d, 0x90be6d];
+type StoredSpan = { id: string; title: string; start: string; end?: string | null; color: number; openEnded?: boolean };
+let spans: StoredSpan[] = [];
+let editingSpanId: string | null = null;
 
 function registerErrorLogging() {
   globalThis.addEventListener('error', (event) => {
@@ -72,6 +77,35 @@ function persistLifeExpectancy(value: number) {
   }
 }
 
+function loadStoredSpans(): StoredSpan[] {
+  try {
+    const raw = localStorage.getItem(SPANS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as StoredSpan[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((span) => ({
+        id: span.id,
+        title: span.title,
+        start: span.start,
+        end: span.end ?? null,
+        color: span.color,
+        openEnded: span.openEnded ?? span.end === null,
+      }))
+      .filter((span) => span.title && span.start && (span.end || span.openEnded));
+  } catch {
+    return [];
+  }
+}
+
+function persistSpans(value: StoredSpan[]) {
+  try {
+    localStorage.setItem(SPANS_KEY, JSON.stringify(value));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 function getBirthdate(): string {
   const input = document.getElementById('birthdate') as HTMLInputElement | null;
   return input?.value || '2000-01-01';
@@ -92,6 +126,15 @@ function getLifeExpectancy(): number {
 function buildLifeData(): LifeData {
   const lifeData = new LifeData(getBirthdate(), getLifeExpectancy());
   lifeData.addEvent(new Date(), 'Today', 'milestone');
+  spans.forEach((span) => {
+    lifeData.spans.push({
+      id: span.id,
+      title: span.title,
+      startDate: new Date(span.start),
+      endDate: span.end ? new Date(span.end) : null,
+      color: span.color,
+    });
+  });
   lifeData.generateWeeks();
   return lifeData;
 }
@@ -103,6 +146,172 @@ function renderLife() {
 
 function loadConfig<T>(defaults: T, overrides?: Partial<T>): T {
   return { ...defaults, ...(overrides || {}) };
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function numberToHex(color: number) {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+function getDefaultSpanStartValue() {
+  const birthInput = document.getElementById('birthdate') as HTMLInputElement | null;
+  return birthInput?.value || '';
+}
+
+function getDefaultSpanEndValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function updateSpanFormState(span: StoredSpan | null) {
+  const titleInput = document.getElementById('span-title') as HTMLInputElement | null;
+  const startInput = document.getElementById('span-start') as HTMLInputElement | null;
+  const endInput = document.getElementById('span-end') as HTMLInputElement | null;
+  const ongoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
+  const submitBtn = document.getElementById('submit-span') as HTMLButtonElement | null;
+  const cancelBtn = document.getElementById('cancel-edit') as HTMLButtonElement | null;
+
+  const setOngoing = (checked: boolean) => {
+    if (ongoingInput) ongoingInput.checked = checked;
+    if (endInput) {
+      endInput.disabled = checked;
+      if (checked) endInput.value = '';
+    }
+  };
+
+  if (span) {
+    editingSpanId = span.id;
+    if (titleInput) titleInput.value = span.title;
+    if (startInput) startInput.value = span.start;
+    if (endInput) endInput.value = span.end || '';
+    setOngoing(Boolean(span.openEnded));
+    if (submitBtn) submitBtn.textContent = 'Update span';
+    if (cancelBtn) cancelBtn.style.visibility = 'visible';
+  } else {
+    editingSpanId = null;
+    if (titleInput) titleInput.value = '';
+    if (startInput) startInput.value = getDefaultSpanStartValue();
+    if (endInput) endInput.value = getDefaultSpanEndValue();
+    setOngoing(false);
+    if (submitBtn) submitBtn.textContent = 'Add span';
+    if (cancelBtn) cancelBtn.style.visibility = 'hidden';
+  }
+}
+
+function beginEditSpan(span: StoredSpan) {
+  updateSpanFormState(span);
+}
+
+function renderSpanList() {
+  const list = document.getElementById('span-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  spans.forEach((span) => {
+    const row = document.createElement('div');
+    row.className = 'span-row';
+    if (span.id === editingSpanId) {
+      row.style.outline = '1px solid rgba(255, 255, 255, 0.14)';
+    }
+
+    const swatch = document.createElement('div');
+    swatch.className = 'span-swatch';
+    swatch.style.backgroundColor = numberToHex(span.color);
+    row.appendChild(swatch);
+
+    const meta = document.createElement('div');
+    meta.className = 'span-meta';
+    const title = document.createElement('div');
+    title.className = 'span-title';
+    title.textContent = span.title;
+    const dates = document.createElement('div');
+    dates.className = 'span-dates-text';
+    dates.textContent = `${formatDate(span.start)} – ${span.end ? formatDate(span.end) : 'Present'}`;
+    meta.appendChild(title);
+    meta.appendChild(dates);
+    row.appendChild(meta);
+
+    const edit = document.createElement('button');
+    edit.className = 'span-edit';
+    edit.textContent = 'Edit';
+    edit.addEventListener('click', () => beginEditSpan(span));
+    row.appendChild(edit);
+
+    const remove = document.createElement('button');
+    remove.className = 'span-remove';
+    remove.textContent = '✕';
+    remove.addEventListener('click', () => {
+      spans = spans.filter((s) => s.id !== span.id);
+      persistSpans(spans);
+      if (editingSpanId === span.id) {
+        updateSpanFormState(null);
+      }
+      renderSpanList();
+      renderLife();
+    });
+    row.appendChild(remove);
+
+    list.appendChild(row);
+  });
+}
+
+function handleAddSpan() {
+  const titleInput = document.getElementById('span-title') as HTMLInputElement | null;
+  const startInput = document.getElementById('span-start') as HTMLInputElement | null;
+  const endInput = document.getElementById('span-end') as HTMLInputElement | null;
+  const ongoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
+  if (!titleInput || !startInput || !endInput) return;
+
+  const title = titleInput.value.trim();
+  const start = startInput.value;
+  const end = endInput.value;
+  const isOngoing = Boolean(ongoingInput?.checked);
+  if (!title || !start || (!end && !isOngoing)) return;
+
+  const startDate = new Date(start);
+  const endDate = end ? new Date(end) : null;
+  if (Number.isNaN(startDate.getTime()) || (end && Number.isNaN(endDate?.getTime() || 0))) return;
+
+  let normalizedStart = start;
+  let normalizedEnd = end;
+  if (!isOngoing && endDate && startDate > endDate) {
+    normalizedStart = end;
+    normalizedEnd = start;
+    if (startInput && endInput) {
+      startInput.value = normalizedStart;
+      endInput.value = normalizedEnd;
+    }
+  }
+
+  if (editingSpanId) {
+    spans = spans.map((s) =>
+      s.id === editingSpanId
+        ? { ...s, title, start: normalizedStart, end: isOngoing ? null : normalizedEnd, openEnded: isOngoing }
+        : s
+    );
+  } else {
+    const color = SPAN_COLORS[spans.length % SPAN_COLORS.length];
+    spans = [
+      ...spans,
+      {
+        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        title,
+        start: normalizedStart,
+        end: isOngoing ? null : normalizedEnd,
+        openEnded: isOngoing,
+        color,
+      },
+    ];
+  }
+  persistSpans(spans);
+  renderSpanList();
+  renderLife();
+
+  updateSpanFormState(null);
 }
 
 async function init() {
@@ -126,6 +335,12 @@ async function init() {
 
   const birthInput = document.getElementById('birthdate') as HTMLInputElement | null;
   const expectancyInput = document.getElementById('life-expectancy') as HTMLInputElement | null;
+  const spanStartInput = document.getElementById('span-start') as HTMLInputElement | null;
+  const spanEndInput = document.getElementById('span-end') as HTMLInputElement | null;
+  const spanOngoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
+  const submitSpanBtn = document.getElementById('submit-span');
+  const cancelEditBtn = document.getElementById('cancel-edit');
+  spans = loadStoredSpans();
 
   const storedBirth = loadStoredBirthdate();
   if (birthInput && storedBirth) {
@@ -136,6 +351,13 @@ async function init() {
   if (expectancyInput && storedExpectancy) {
     expectancyInput.value = storedExpectancy.toString();
   }
+  if (spanStartInput && birthInput) {
+    spanStartInput.value = birthInput.value;
+  }
+  if (spanEndInput) {
+    spanEndInput.value = new Date().toISOString().slice(0, 10);
+  }
+  updateSpanFormState(null);
 
   const runtimeOverrides = (globalThis as typeof globalThis & {
     lifeConfig?: {
@@ -150,6 +372,7 @@ async function init() {
 
   gridLayout = new GridLayout(app, gridMotion, gridPalette);
   renderLife();
+  renderSpanList();
 
   birthInput?.addEventListener('change', () => {
     persistBirthdate(getBirthdate());
@@ -159,6 +382,24 @@ async function init() {
     const value = getLifeExpectancy();
     persistLifeExpectancy(value);
     renderLife();
+  });
+
+  submitSpanBtn?.addEventListener('click', handleAddSpan);
+  cancelEditBtn?.addEventListener('click', () => updateSpanFormState(null));
+  spanOngoingInput?.addEventListener('change', () => {
+    const endField = document.getElementById('span-end') as HTMLInputElement | null;
+    if (!endField) return;
+    endField.disabled = Boolean(spanOngoingInput.checked);
+    if (spanOngoingInput.checked) {
+      endField.value = '';
+    } else if (!endField.value) {
+      endField.value = getDefaultSpanEndValue();
+    }
+  });
+  document.getElementById('span-title')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      handleAddSpan();
+    }
   });
 
   new ViewportManager(app, gridLayout.container, viewportCfg);
