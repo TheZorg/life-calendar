@@ -89,7 +89,7 @@ function loadStoredSpans(): StoredSpan[] {
         title: span.title,
         start: span.start,
         end: span.end ?? null,
-        color: span.color,
+        color: typeof span.color === 'number' ? span.color : parseInt(String(span.color ?? '0'), 10) || SPAN_COLORS[0],
         openEnded: span.openEnded ?? span.end === null,
       }))
       .filter((span) => span.title && span.start && (span.end || span.openEnded));
@@ -158,6 +158,13 @@ function numberToHex(color: number) {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
+function parseColorInput(value: string, fallback: number) {
+  if (!value) return fallback;
+  const clean = value.startsWith('#') ? value.slice(1) : value;
+  const parsed = Number.parseInt(clean, 16);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function getDefaultSpanStartValue() {
   const birthInput = document.getElementById('birthdate') as HTMLInputElement | null;
   return birthInput?.value || '';
@@ -172,6 +179,7 @@ function updateSpanFormState(span: StoredSpan | null) {
   const startInput = document.getElementById('span-start') as HTMLInputElement | null;
   const endInput = document.getElementById('span-end') as HTMLInputElement | null;
   const ongoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
+  const colorInput = document.getElementById('span-color') as HTMLInputElement | null;
   const submitBtn = document.getElementById('submit-span') as HTMLButtonElement | null;
   const cancelBtn = document.getElementById('cancel-edit') as HTMLButtonElement | null;
 
@@ -188,6 +196,7 @@ function updateSpanFormState(span: StoredSpan | null) {
     if (titleInput) titleInput.value = span.title;
     if (startInput) startInput.value = span.start;
     if (endInput) endInput.value = span.end || '';
+    if (colorInput) colorInput.value = numberToHex(span.color);
     setOngoing(Boolean(span.openEnded));
     if (submitBtn) submitBtn.textContent = 'Update span';
     if (cancelBtn) cancelBtn.style.visibility = 'visible';
@@ -196,6 +205,7 @@ function updateSpanFormState(span: StoredSpan | null) {
     if (titleInput) titleInput.value = '';
     if (startInput) startInput.value = getDefaultSpanStartValue();
     if (endInput) endInput.value = getDefaultSpanEndValue();
+    if (colorInput) colorInput.value = numberToHex(SPAN_COLORS[spans.length % SPAN_COLORS.length]);
     setOngoing(false);
     if (submitBtn) submitBtn.textContent = 'Add span';
     if (cancelBtn) cancelBtn.style.visibility = 'hidden';
@@ -264,6 +274,7 @@ function handleAddSpan() {
   const startInput = document.getElementById('span-start') as HTMLInputElement | null;
   const endInput = document.getElementById('span-end') as HTMLInputElement | null;
   const ongoingInput = document.getElementById('span-ongoing') as HTMLInputElement | null;
+  const colorInput = document.getElementById('span-color') as HTMLInputElement | null;
   if (!titleInput || !startInput || !endInput) return;
 
   const title = titleInput.value.trim();
@@ -290,11 +301,19 @@ function handleAddSpan() {
   if (editingSpanId) {
     spans = spans.map((s) =>
       s.id === editingSpanId
-        ? { ...s, title, start: normalizedStart, end: isOngoing ? null : normalizedEnd, openEnded: isOngoing }
+        ? {
+            ...s,
+            title,
+            start: normalizedStart,
+            end: isOngoing ? null : normalizedEnd,
+            openEnded: isOngoing,
+            color: colorInput ? parseColorInput(colorInput.value, s.color) : s.color,
+          }
         : s
     );
   } else {
-    const color = SPAN_COLORS[spans.length % SPAN_COLORS.length];
+    const defaultColor = SPAN_COLORS[spans.length % SPAN_COLORS.length];
+    const color = colorInput ? parseColorInput(colorInput.value, defaultColor) : defaultColor;
     spans = [
       ...spans,
       {

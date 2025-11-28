@@ -84,6 +84,23 @@ body {
     height: 16px;
 }
 
+.span-color {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #c7c7c7;
+}
+
+.span-color input {
+    width: 44px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: #111;
+}
+
 .span-actions {
     display: flex;
     gap: 8px;
