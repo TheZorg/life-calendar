@@ -17,43 +17,117 @@
 
 <body>
     <div class="controls">
-      <div class="control-group">
-        <label>
-          Birthdate
-          <input id="birthdate" type="date" value="2000-01-01">
-        </label>
-        <label>
-          Life expectancy (years)
-          <input id="life-expectancy" type="number" min="1" max="120" value="90">
-        </label>
+      <div class="controls-bar">
+        <div class="controls-title">Controls</div>
+        <button id="controls-toggle" type="button" class="controls-toggle">Hide</button>
       </div>
-      <div class="span-panel">
-        <div class="span-form">
-          <input id="span-title" type="text" placeholder="Span title">
-          <div class="span-dates">
-            <label>
-              Start
-              <input id="span-start" type="date">
+      <div class="controls-body">
+        <div class="control-group">
+          <label>
+            Birthdate
+            <input id="birthdate" type="date" value="2000-01-01">
+          </label>
+          <label>
+            Life expectancy (years)
+            <input id="life-expectancy" type="number" min="1" max="120" value="90">
+          </label>
+        </div>
+        <div class="span-panel">
+          <div class="span-form">
+            <input id="span-title" type="text" placeholder="Span title">
+            <div class="span-dates">
+              <label>
+                Start
+                <input id="span-start" type="date">
+              </label>
+              <label>
+                End
+                <input id="span-end" type="date">
+              </label>
+            </div>
+            <label class="span-color">
+              Color
+              <input id="span-color" type="color" value="#7bdff2">
             </label>
-            <label>
-              End
-              <input id="span-end" type="date">
+            <label class="span-ongoing">
+              <input id="span-ongoing" type="checkbox">
+              Ongoing / no end date
+            </label>
+            <div class="span-actions">
+              <button id="submit-span" type="button">Add span</button>
+              <button id="cancel-edit" type="button" class="ghost">Cancel</button>
+            </div>
+          </div>
+          <div id="span-list" class="span-list"></div>
+        </div>
+        <div class="fx-panel">
+          <div class="fx-header">
+            <div class="fx-title">Post FX</div>
+            <label class="fx-toggle">
+              <input id="fx-enabled" type="checkbox" checked>
+              Enabled
             </label>
           </div>
-          <label class="span-color">
-            Color
-            <input id="span-color" type="color" value="#7bdff2">
-          </label>
-          <label class="span-ongoing">
-            <input id="span-ongoing" type="checkbox">
-            Ongoing / no end date
-          </label>
-          <div class="span-actions">
-            <button id="submit-span" type="button">Add span</button>
-            <button id="cancel-edit" type="button" class="ghost">Cancel</button>
+          <div class="fx-section">
+            <div class="fx-section-title">Bloom</div>
+            <div class="fx-fields">
+              <label class="fx-field">
+                <span>Enabled</span>
+                <input id="fx-bloom-enabled" type="checkbox">
+              </label>
+              <label class="fx-field">
+                <span>Threshold</span>
+                <input id="fx-bloom-threshold" type="range" min="0" max="1" step="0.01">
+              </label>
+              <label class="fx-field">
+                <span>Scale</span>
+                <input id="fx-bloom-scale" type="range" min="0" max="4" step="0.05">
+              </label>
+              <label class="fx-field">
+                <span>Brightness</span>
+                <input id="fx-bloom-brightness" type="range" min="0" max="4" step="0.01">
+              </label>
+              <label class="fx-field">
+                <span>Blur</span>
+                <input id="fx-bloom-blur" type="range" min="0" max="15" step="0.5">
+              </label>
+            </div>
+          </div>
+          <div class="fx-section">
+            <div class="fx-section-title">Aberration</div>
+            <div class="fx-fields">
+              <label class="fx-field">
+                <span>Amount</span>
+                <input id="fx-aberration-amount" type="range" min="0" max="10" step="0.1">
+              </label>
+              <label class="fx-field">
+                <span>Jitter</span>
+                <input id="fx-aberration-jitter" type="range" min="0" max="10" step="0.1">
+              </label>
+              <label class="fx-field">
+                <span>Animated</span>
+                <input id="fx-aberration-animated" type="checkbox">
+              </label>
+            </div>
+          </div>
+          <div class="fx-section">
+            <div class="fx-section-title">Grain</div>
+            <div class="fx-fields">
+              <label class="fx-field">
+                <span>Amount</span>
+                <input id="fx-grain-amount" type="range" min="0" max="0.5" step="0.01">
+              </label>
+              <label class="fx-field">
+                <span>Seed</span>
+                <input id="fx-grain-seed" type="range" min="0" max="1" step="0.01">
+              </label>
+              <label class="fx-field">
+                <span>Animated</span>
+                <input id="fx-grain-animated" type="checkbox">
+              </label>
+            </div>
           </div>
         </div>
-        <div id="span-list" class="span-list"></div>
       </div>
     </div>
     <div id="app"></div>

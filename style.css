@@ -16,14 +16,55 @@ body {
 
 .controls {
     display: flex;
-    gap: 16px;
+    flex-direction: column;
+    gap: 10px;
     padding: 12px 16px;
-    align-items: flex-start;
     background: rgba(0, 0, 0, 0.5);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(6px);
     z-index: 10;
+}
+
+.controls-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.controls-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f5f5f5;
+    letter-spacing: 0.02em;
+}
+
+.controls-toggle {
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e5e5e5;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease;
+}
+
+.controls-toggle:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.controls-body {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
     flex-wrap: wrap;
+    max-height: 320px;
+    overflow: auto;
+}
+
+.controls.collapsed .controls-body {
+    display: none;
 }
 
 .control-group {
@@ -193,6 +234,81 @@ body {
 
 .span-edit {
     color: #a9e7ff;
+}
+
+.fx-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(20, 20, 20, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    min-width: 260px;
+    max-width: 340px;
+}
+
+.fx-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.fx-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #f6f6f6;
+}
+
+.fx-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #c7c7c7;
+    cursor: pointer;
+}
+
+.fx-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fx-section-title {
+    font-size: 12px;
+    color: #d5d5d5;
+    letter-spacing: 0.02em;
+}
+
+.fx-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+.fx-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    color: #c7c7c7;
+}
+
+.fx-field input[type="number"] {
+    width: 80px;
+}
+
+.fx-field input[type="range"] {
+    flex: 1;
+}
+
+.fx-field input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
 }
 
 #app {

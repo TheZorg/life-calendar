@@ -1,6 +1,12 @@
-import { Application, Container, Graphics, Text } from 'pixi.js';
-import { LifeData } from './data.ts';
-import { GridMotionConfig, GridLabelStyle, GridPalette, defaultGridMotion, defaultGridPalette } from './config.ts';
+import { Application, Container, Graphics, Text } from "pixi.js";
+import { LifeData } from "./data.ts";
+import {
+  defaultGridMotion,
+  defaultGridPalette,
+  GridLabelStyle,
+  GridMotionConfig,
+  GridPalette,
+} from "./config.ts";
 
 interface WeekCell {
   graphic: Graphics;
@@ -29,6 +35,8 @@ interface LabelState {
 export class GridLayout {
   app: Application;
   container: Container;
+  fxContainer: Container;
+  labelLayer: Container;
   weekSize = 11;
   gap = 10;
   yearGap = 8;
@@ -42,16 +50,22 @@ export class GridLayout {
   spanGutter = 170;
   spanLaneSpacing = 26;
   spanMinWidth = 120;
+  textResolution: number;
 
   constructor(
     app: Application,
     motionOverrides: Partial<GridMotionConfig> = {},
-    paletteOverrides: Partial<GridPalette> = {}
+    paletteOverrides: Partial<GridPalette> = {},
   ) {
     this.app = app;
     this.container = new Container();
+    this.fxContainer = new Container();
+    this.labelLayer = new Container();
+    this.container.addChild(this.fxContainer);
+    this.container.addChild(this.labelLayer);
     this.motion = this.mergeMotion(defaultGridMotion, motionOverrides);
     this.palette = { ...defaultGridPalette, ...paletteOverrides };
+    this.textResolution = Math.min((globalThis.devicePixelRatio || 1) * 2, 4);
     this.app.stage.addChild(this.container);
     this.app.ticker.add((ticker) => this.animate(ticker.deltaMS));
     this.registerPointerTracking();
@@ -64,20 +78,19 @@ export class GridLayout {
     const prevScale = this.container.scale.clone();
     const prevPosition = { x: this.container.x, y: this.container.y };
 
-    this.container.removeChildren();
+    this.fxContainer.removeChildren();
+    this.labelLayer.removeChildren();
     this.cells = [];
 
     const cellLayer = new Container();
     const ringLayer = new Container();
     const spanLayer = new Container();
     spanLayer.sortableChildren = true;
-    const labelLayer = new Container();
-    this.container.addChild(cellLayer);
-    this.container.addChild(ringLayer);
-    this.container.addChild(spanLayer);
-    this.container.addChild(labelLayer);
-    labelLayer.addChild(this.weekLabel.container);
-    labelLayer.addChild(this.yearLabel.container);
+    this.fxContainer.addChild(cellLayer);
+    this.fxContainer.addChild(ringLayer);
+    this.labelLayer.addChild(spanLayer);
+    this.labelLayer.addChild(this.weekLabel.container);
+    this.labelLayer.addChild(this.yearLabel.container);
 
     const cellByIndex = new Map<number, WeekCell>();
 
@@ -143,7 +156,8 @@ export class GridLayout {
       this.container.scale.set(prevScale.x, prevScale.y);
       this.container.position.set(prevPosition.x, prevPosition.y);
     } else {
-      this.container.x = (this.app.screen.width - totalWidth) / 2 + this.spanGutter;
+      this.container.x = (this.app.screen.width - totalWidth) / 2 +
+        this.spanGutter;
       this.container.y = (this.app.screen.height - gridHeight) / 2;
     }
   }
@@ -156,9 +170,9 @@ export class GridLayout {
       this.setPointerFromView(viewX, viewY);
     };
 
-    this.app.canvas.addEventListener('pointermove', updatePointer);
-    this.app.canvas.addEventListener('pointerdown', updatePointer);
-    this.app.canvas.addEventListener('pointerleave', () => {
+    this.app.canvas.addEventListener("pointermove", updatePointer);
+    this.app.canvas.addEventListener("pointerdown", updatePointer);
+    this.app.canvas.addEventListener("pointerleave", () => {
       this.pointer.active = false;
     });
   }
@@ -189,9 +203,12 @@ export class GridLayout {
     this.updateWeekLabel(hoveredCell, deltaMs);
 
     for (const cell of this.cells) {
-      const noiseX = Math.sin(cell.jitterSeed + t * this.motion.idle.jitterSpeed) * this.motion.idle.jitter;
-      const noiseY =
-        Math.cos(cell.jitterSeed * 0.73 + t * (this.motion.idle.jitterSpeed * 0.9)) * this.motion.idle.jitter;
+      const noiseX =
+        Math.sin(cell.jitterSeed + t * this.motion.idle.jitterSpeed) *
+        this.motion.idle.jitter;
+      const noiseY = Math.cos(
+        cell.jitterSeed * 0.73 + t * (this.motion.idle.jitterSpeed * 0.9),
+      ) * this.motion.idle.jitter;
 
       let influence = 0;
 
@@ -208,18 +225,32 @@ export class GridLayout {
 
       cell.hoverHeat = Math.max(influence, cell.hoverHeat * heatDecay);
 
-      const yearTarget = hoveredYear !== null && cell.yearIndex === hoveredYear ? 1 : 0;
+      const yearTarget = hoveredYear !== null && cell.yearIndex === hoveredYear
+        ? 1
+        : 0;
       const focusTarget = hoveredCell === cell ? 1 : 0;
-      cell.yearHeat = this.smooth(cell.yearHeat, yearTarget, this.motion.year.followRate, deltaMs);
-      cell.focusHeat = this.smooth(cell.focusHeat, focusTarget, this.motion.selection.followRate, deltaMs);
+      cell.yearHeat = this.smooth(
+        cell.yearHeat,
+        yearTarget,
+        this.motion.year.followRate,
+        deltaMs,
+      );
+      cell.focusHeat = this.smooth(
+        cell.focusHeat,
+        focusTarget,
+        this.motion.selection.followRate,
+        deltaMs,
+      );
 
       const breathing =
-        Math.sin(cell.jitterSeed * 0.61 + t * this.motion.idle.breathingSpeed) * this.motion.idle.breathingAmount;
-      const magnify = Math.pow(cell.hoverHeat, this.motion.hover.magnifyExponent) * this.motion.hover.magnifyStrength;
+        Math.sin(cell.jitterSeed * 0.61 + t * this.motion.idle.breathingSpeed) *
+        this.motion.idle.breathingAmount;
+      const magnify =
+        Math.pow(cell.hoverHeat, this.motion.hover.magnifyExponent) *
+        this.motion.hover.magnifyStrength;
       const yearLift = cell.yearHeat * this.motion.year.highlightScale;
       const focusLift = cell.focusHeat * this.motion.selection.scaleBoost;
-      const pulse =
-        1 +
+      const pulse = 1 +
         Math.sin(t * this.motion.selection.pulseSpeed + cell.jitterSeed) *
           this.motion.selection.pulseAmount *
           cell.focusHeat;
@@ -227,31 +258,48 @@ export class GridLayout {
 
       let tintMix = cell.baseColor;
       if (cell.yearHeat > 0) {
-        tintMix = this.mixColor(tintMix, this.motion.year.highlightColor, cell.yearHeat * this.motion.year.highlightMix);
+        tintMix = this.mixColor(
+          tintMix,
+          this.motion.year.highlightColor,
+          cell.yearHeat * this.motion.year.highlightMix,
+        );
       }
       if (cell.focusHeat > 0) {
-        tintMix = this.mixColor(tintMix, this.motion.selection.color, cell.focusHeat);
+        tintMix = this.mixColor(
+          tintMix,
+          this.motion.selection.color,
+          cell.focusHeat,
+        );
       }
 
       cell.graphic.tint = tintMix;
-      cell.graphic.alpha = 0.78 + cell.hoverHeat * 0.15 + cell.yearHeat * 0.08 + cell.focusHeat * 0.12;
+      cell.graphic.alpha = 0.78 + cell.hoverHeat * 0.15 + cell.yearHeat * 0.08 +
+        cell.focusHeat * 0.12;
 
       cell.graphic.position.set(cell.baseX + noiseX, cell.baseY + noiseY);
       cell.graphic.scale.set(scale);
 
-      const ringAlpha = cell.yearHeat * 0.22 + cell.focusHeat * this.motion.selection.outlineAlpha;
+      const ringAlpha = cell.yearHeat * 0.22 +
+        cell.focusHeat * this.motion.selection.outlineAlpha;
       cell.ring.alpha = ringAlpha;
-      const ringTint = this.mixColor(this.motion.year.highlightColor, this.motion.selection.outlineColor, cell.focusHeat);
+      const ringTint = this.mixColor(
+        this.motion.year.highlightColor,
+        this.motion.selection.outlineColor,
+        cell.focusHeat,
+      );
       cell.ring.tint = ringTint;
       cell.ring.position.set(cell.baseX + noiseX, cell.baseY + noiseY);
-      cell.ring.scale.set(scale * (1 + cell.yearHeat * 0.05 + cell.focusHeat * 0.12));
+      cell.ring.scale.set(
+        scale * (1 + cell.yearHeat * 0.05 + cell.focusHeat * 0.12),
+      );
     }
   }
 
   private resolveHoveredCell(): WeekCell | null {
     if (!this.pointer.active || !this.cells.length) return null;
 
-    const thresholdSq = this.motion.hover.detectRadius * this.motion.hover.detectRadius;
+    const thresholdSq = this.motion.hover.detectRadius *
+      this.motion.hover.detectRadius;
     let closest: WeekCell | null = null;
     let bestDist = thresholdSq;
 
@@ -312,12 +360,28 @@ export class GridLayout {
         label.target.x = bounds.minX - labelWidth - offset;
         label.target.y = (bounds.minY + bounds.maxY) / 2;
 
-        label.pos.x = this.smooth(label.pos.x, label.target.x, style.followRate, deltaMs);
-        label.pos.y = this.smooth(label.pos.y, label.target.y, style.followRate, deltaMs);
+        label.pos.x = this.smooth(
+          label.pos.x,
+          label.target.x,
+          style.followRate,
+          deltaMs,
+        );
+        label.pos.y = this.smooth(
+          label.pos.y,
+          label.target.y,
+          style.followRate,
+          deltaMs,
+        );
         label.container.position.set(label.pos.x, label.pos.y);
 
         label.bg.clear();
-        label.bg.roundRect(-pad, -labelHeight / 2, labelWidth, labelHeight, style.radius);
+        label.bg.roundRect(
+          -pad,
+          -labelHeight / 2,
+          labelWidth,
+          labelHeight,
+          style.radius,
+        );
         label.bg.fill({ color: style.bg, alpha: 0.86 });
       }
     }
@@ -333,7 +397,9 @@ export class GridLayout {
     if (hoveredCell) {
       const key = `week-${hoveredCell.startDate.toISOString()}`;
       if (label.currentKey !== key) {
-        label.text.text = `Week of ${this.formatWeekLabel(hoveredCell.startDate)}`;
+        label.text.text = `Week of ${
+          this.formatWeekLabel(hoveredCell.startDate)
+        }`;
         label.currentKey = key;
       }
 
@@ -345,12 +411,28 @@ export class GridLayout {
       label.target.x = hoveredCell.baseX + offset;
       label.target.y = hoveredCell.baseY - this.weekSize * 0.2;
 
-      label.pos.x = this.smooth(label.pos.x, label.target.x, style.followRate, deltaMs);
-      label.pos.y = this.smooth(label.pos.y, label.target.y, style.followRate, deltaMs);
+      label.pos.x = this.smooth(
+        label.pos.x,
+        label.target.x,
+        style.followRate,
+        deltaMs,
+      );
+      label.pos.y = this.smooth(
+        label.pos.y,
+        label.target.y,
+        style.followRate,
+        deltaMs,
+      );
       label.container.position.set(label.pos.x, label.pos.y);
 
       label.bg.clear();
-      label.bg.roundRect(-pad, -labelHeight / 2, labelWidth, labelHeight, style.radius);
+      label.bg.roundRect(
+        -pad,
+        -labelHeight / 2,
+        labelWidth,
+        labelHeight,
+        style.radius,
+      );
       label.bg.fill({ color: style.bg, alpha: 0.86 });
     }
   }
@@ -361,12 +443,13 @@ export class GridLayout {
     const bg = new Graphics();
     container.addChild(bg);
     const text = new Text({
-      text: '',
+      text: "",
+      resolution: this.textResolution,
       style: {
         fill: style.text,
         fontSize: 12,
-        fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-        align: 'left',
+        fontFamily: "JetBrains Mono, Menlo, Monaco, Consolas, monospace",
+        align: "left",
       },
     });
     text.anchor.set(0, 0.5);
@@ -384,14 +467,23 @@ export class GridLayout {
   }
 
   private formatWeekLabel(startDate: Date) {
-    return startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return startDate.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }
 
-  private renderSpans(data: LifeData, layer: Container, cellByIndex: Map<number, WeekCell>) {
+  private renderSpans(
+    data: LifeData,
+    layer: Container,
+    cellByIndex: Map<number, WeekCell>,
+  ) {
     if (!data.spansWithBounds?.length) return;
 
     const spans = [...data.spansWithBounds].sort(
-      (a, b) => a.startWeekIndex - b.startWeekIndex || a.endWeekIndex - b.endWeekIndex
+      (a, b) =>
+        a.startWeekIndex - b.startWeekIndex || a.endWeekIndex - b.endWeekIndex,
     );
     const laneEnds: number[] = [];
 
@@ -418,8 +510,9 @@ export class GridLayout {
         style: {
           fill: 0x0b0d10,
           fontSize: 12,
-          fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+          fontFamily: "JetBrains Mono, Menlo, Monaco, Consolas, monospace",
         },
+        resolution: this.textResolution,
       });
       text.anchor.set(0, 0.5);
 
@@ -428,7 +521,13 @@ export class GridLayout {
       const pillWidth = Math.max(this.spanMinWidth, text.width + padX * 2);
 
       const pillBg = new Graphics();
-      pillBg.roundRect(0, -pillHeight / 2, pillWidth, pillHeight, pillHeight / 2.2);
+      pillBg.roundRect(
+        0,
+        -pillHeight / 2,
+        pillWidth,
+        pillHeight,
+        pillHeight / 2.2,
+      );
       pillBg.fill({ color: span.color, alpha: 0.88 });
 
       const minY = Math.min(startCell.baseY, endCell.baseY);
@@ -477,7 +576,10 @@ export class GridLayout {
     }
   }
 
-  private mergeMotion(base: GridMotionConfig, overrides: Partial<GridMotionConfig>): GridMotionConfig {
+  private mergeMotion(
+    base: GridMotionConfig,
+    overrides: Partial<GridMotionConfig>,
+  ): GridMotionConfig {
     return {
       idle: { ...base.idle, ...(overrides.idle || {}) },
       hover: { ...base.hover, ...(overrides.hover || {}) },
@@ -495,7 +597,12 @@ export class GridLayout {
     };
   }
 
-  private smooth(value: number, target: number, rate: number, deltaMs: number): number {
+  private smooth(
+    value: number,
+    target: number,
+    rate: number,
+    deltaMs: number,
+  ): number {
     const decay = Math.exp(-deltaMs * rate);
     return target + (value - target) * decay;
   }
@@ -529,6 +636,7 @@ export class GridLayout {
     });
 
     const count = spans.length;
-    return ((Math.round(r / count) << 16) | (Math.round(g / count) << 8) | Math.round(b / count)) >>> 0;
+    return ((Math.round(r / count) << 16) | (Math.round(g / count) << 8) |
+      Math.round(b / count)) >>> 0;
   }
 }

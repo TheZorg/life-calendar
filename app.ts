@@ -1,4 +1,4 @@
-import { Application, NoiseFilter, Point } from "pixi.js";
+import { Application, Container, NoiseFilter, Point } from "pixi.js";
 import { AdvancedBloomFilter, RGBSplitFilter } from "pixi-filters";
 import { LifeData } from "./data.ts";
 import { GridLayout } from "./grid.ts";
@@ -416,6 +416,152 @@ function handleAddSpan() {
   updateSpanFormState(null);
 }
 
+function setupPostFxControls(
+  config: PostProcessingConfig,
+  controller: PostProcessingController,
+) {
+  let current = {
+    ...config,
+    bloom: { ...config.bloom },
+    aberration: { ...config.aberration },
+    grain: { ...config.grain },
+  };
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+
+  const pushUpdate = () => {
+    controller.update({
+      ...current,
+      bloom: { ...current.bloom },
+      aberration: { ...current.aberration },
+      grain: { ...current.grain },
+    });
+  };
+
+  const bindCheckbox = (
+    id: string,
+    getter: () => boolean,
+    setter: (checked: boolean) => void,
+  ) => {
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    if (!el) return;
+    el.checked = getter();
+    el.addEventListener("change", () => {
+      setter(Boolean(el.checked));
+      pushUpdate();
+    });
+  };
+
+  const bindNumber = (
+    id: string,
+    getter: () => number,
+    setter: (value: number) => void,
+    min: number,
+    max: number,
+  ) => {
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    if (!el) return;
+    el.value = getter().toString();
+
+    const applyValue = (raw: number) => {
+      const clamped = clamp(raw, min, max);
+      el.value = clamped.toString();
+      setter(clamped);
+      pushUpdate();
+    };
+
+    const handleChange = () => {
+      const parsed = Number.parseFloat(el.value);
+      if (Number.isNaN(parsed)) {
+        el.value = getter().toString();
+        return;
+      }
+      applyValue(parsed);
+    };
+
+    el.addEventListener("change", handleChange);
+    el.addEventListener("input", handleChange);
+  };
+
+  bindCheckbox("fx-enabled", () => current.enabled, (val) => {
+    current.enabled = val;
+  });
+  bindCheckbox("fx-bloom-enabled", () => current.bloom.enabled, (val) => {
+    current.bloom.enabled = val;
+  });
+  bindNumber(
+    "fx-bloom-threshold",
+    () => current.bloom.threshold,
+    (val) => (current.bloom.threshold = val),
+    0,
+    1,
+  );
+  bindNumber(
+    "fx-bloom-scale",
+    () => current.bloom.bloomScale,
+    (val) => (current.bloom.bloomScale = val),
+    0,
+    4,
+  );
+  bindNumber(
+    "fx-bloom-brightness",
+    () => current.bloom.brightness,
+    (val) => (current.bloom.brightness = val),
+    0,
+    4,
+  );
+  bindNumber(
+    "fx-bloom-blur",
+    () => current.bloom.blur,
+    (val) => (current.bloom.blur = val),
+    0,
+    15,
+  );
+
+  bindNumber(
+    "fx-aberration-amount",
+    () => current.aberration.amount,
+    (val) => (current.aberration.amount = val),
+    0,
+    10,
+  );
+  bindNumber(
+    "fx-aberration-jitter",
+    () => current.aberration.jitter,
+    (val) => (current.aberration.jitter = val),
+    0,
+    10,
+  );
+  bindCheckbox(
+    "fx-aberration-animated",
+    () => current.aberration.animated,
+    (val) => {
+      current.aberration.animated = val;
+    },
+  );
+
+  bindNumber(
+    "fx-grain-amount",
+    () => current.grain.amount,
+    (val) => (current.grain.amount = val),
+    0,
+    0.5,
+  );
+  bindNumber(
+    "fx-grain-seed",
+    () => current.grain.seed,
+    (val) => (current.grain.seed = val),
+    0,
+    1,
+  );
+  bindCheckbox("fx-grain-animated", () => current.grain.animated, (val) => {
+    current.grain.animated = val;
+  });
+
+  pushUpdate();
+}
+
 async function init() {
   try {
     await app.init({
@@ -494,7 +640,11 @@ async function init() {
   const postFxCfg = loadPostProcessingConfig(runtimeOverrides?.postProcessing);
 
   gridLayout = new GridLayout(app, gridMotion, gridPalette);
-  applyPostProcessing(app, postFxCfg);
+  const postFxController = createPostProcessingController(
+    app,
+    gridLayout.fxContainer,
+    postFxCfg,
+  );
   renderLife();
   renderSpanList();
 
@@ -528,34 +678,37 @@ async function init() {
     }
   });
 
+  setupPostFxControls(postFxCfg, postFxController);
+  const controlsToggle = document.getElementById("controls-toggle");
+  const controls = document.querySelector(".controls");
+  if (controlsToggle && controls instanceof HTMLElement) {
+    controlsToggle.addEventListener("click", () => {
+      const isCollapsed = controls.classList.toggle("collapsed");
+      controlsToggle.textContent = isCollapsed ? "Show" : "Hide";
+    });
+  }
+
   new ViewportManager(app, gridLayout.container, viewportCfg);
 }
 
-function applyPostProcessing(app: Application, config: PostProcessingConfig) {
-  if (!config.enabled) return;
+type PostProcessingController = {
+  update: (config: PostProcessingConfig) => void;
+};
 
-  const filters = [];
-  if (config.bloom.enabled) {
-    const bloom = new AdvancedBloomFilter({
-      threshold: config.bloom.threshold,
-      bloomScale: config.bloom.bloomScale,
-      brightness: config.bloom.brightness,
-      blur: config.bloom.blur,
-    });
-    filters.push(bloom);
-  }
-  const rgbSplit = new RGBSplitFilter();
-  const grain = new NoiseFilter({
-    noise: config.grain.amount,
-    seed: config.grain.seed,
-  });
-  filters.push(rgbSplit, grain);
-  app.stage.filters = filters;
-
+function createPostProcessingController(
+  app: Application,
+  target: Container,
+  initialConfig: PostProcessingConfig,
+): PostProcessingController {
+  let config = initialConfig;
+  let bloom: AdvancedBloomFilter | null = null;
+  let rgbSplit: RGBSplitFilter | null = null;
+  let grain: NoiseFilter | null = null;
   let elapsed = 0;
-  const aberrationBase = config.aberration.amount;
-  const jitter = config.aberration.jitter;
+  let tickerFn: ((ticker: { deltaMS?: number }) => void) | null = null;
+
   const updateAberration = (offset: number) => {
+    if (!rgbSplit) return;
     const redX = -offset;
     const redY = -offset * 0.55;
     const blueX = offset;
@@ -570,22 +723,82 @@ function applyPostProcessing(app: Application, config: PostProcessingConfig) {
       ? rgbSplit.blue.set(blueX, blueY)
       : (rgbSplit.blue = new Point(blueX, blueY));
   };
-  updateAberration(aberrationBase);
 
-  app.ticker.add((ticker) => {
-    const deltaMs = ticker.deltaMS ?? 0;
-    elapsed += deltaMs;
-
-    if (config.aberration.animated) {
-      const wobble = Math.sin(elapsed * 0.0018) * jitter;
-      updateAberration(aberrationBase + wobble);
+  const updateFilters = () => {
+    if (!config.enabled) {
+      target.filters = [];
+      if (tickerFn) {
+        app.ticker.remove(tickerFn);
+        tickerFn = null;
+      }
+      return;
     }
 
-    if (config.grain.animated) {
-      const deltaSeed = (deltaMs * 0.0002) % 1;
-      grain.seed = (grain.seed + deltaSeed) % 1;
+    if (!rgbSplit) rgbSplit = new RGBSplitFilter();
+    if (!grain) {
+      grain = new NoiseFilter({
+        noise: config.grain.amount,
+        seed: config.grain.seed,
+      });
+    } else {
+      grain.noise = config.grain.amount;
+      grain.seed = config.grain.seed;
     }
-  });
+
+    if (config.bloom.enabled) {
+      if (!bloom) {
+        bloom = new AdvancedBloomFilter();
+      }
+      bloom.threshold = config.bloom.threshold;
+      bloom.bloomScale = config.bloom.bloomScale;
+      bloom.brightness = config.bloom.brightness;
+      bloom.blur = config.bloom.blur;
+    } else {
+      bloom = null;
+    }
+
+    const filters = bloom ? [bloom, rgbSplit, grain] : [rgbSplit, grain];
+    target.filters = filters;
+
+    if (!tickerFn) {
+      tickerFn = (ticker) => {
+        const deltaMs = ticker.deltaMS ?? 0;
+        elapsed += deltaMs;
+
+        const base = config.aberration.amount;
+        const jitter = config.aberration.jitter;
+
+        if (config.aberration.animated) {
+          const wobble = Math.sin(elapsed * 0.0018) * jitter;
+          updateAberration(base + wobble);
+        } else {
+          updateAberration(base);
+        }
+
+        if (grain) {
+          if (config.grain.animated) {
+            const deltaSeed = (deltaMs * 0.0002) % 1;
+            grain.seed = (grain.seed + deltaSeed) % 1;
+          } else {
+            grain.seed = config.grain.seed;
+          }
+        }
+      };
+      app.ticker.add(tickerFn);
+    } else {
+      updateAberration(config.aberration.amount);
+    }
+  };
+
+  updateFilters();
+
+  return {
+    update(nextConfig) {
+      config = nextConfig;
+      elapsed = 0;
+      updateFilters();
+    },
+  };
 }
 
 init();
